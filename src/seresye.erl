@@ -64,7 +64,7 @@ retract(Name, Facts) ->
 
 add_rules(Name, RuleList)
   when is_list(RuleList) orelse is_atom(RuleList) ->
-    gen_server:call(Name, {add_rules, RuleList}).
+    gen_server:call(Name, {add_rules, RuleList}, infinity).
 
 add_rule(Name, Fun) ->
     gen_server:call(Name, {add_rule, Fun}).
