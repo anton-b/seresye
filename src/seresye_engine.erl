@@ -37,7 +37,7 @@ new() ->
     new([]).
 
 new(ClientState) ->
-    seresye_agenda:new(#seresye{kb=[], alfa=[],
+    seresye_agenda:new(#seresye{kb=sets:new(), alfa=[],
                               join=seresye_tree_list:new(),
                               pending_actions=[],
                               client_state=ClientState}).
@@ -53,7 +53,7 @@ get_client_state(#seresye{client_state=State}) ->
 
 cleanup(#seresye{ alfa = Alfa0, join = Join0 }) ->
     [ begin (catch ets:delete(Tab)), Tab end || {_, Tab, _} <- Alfa0 ] ++
-    [ begin (catch ets:delete(Tab)), Tab end || {{Tab, _}, _, _, _, _} <- Join0, is_integer(Tab) ].         
+    [ begin (catch ets:delete(Tab)), Tab end || {{Tab, _}, _, _, _, _} <- Join0, is_integer(Tab) ].
 
 restore(#seresye{ alfa = Alfa0, join = Join0 } = Engine) ->
     TabCache = ets:new(tab_cache, []),
@@ -70,7 +70,7 @@ restore(#seresye{ alfa = Alfa0, join = Join0 } = Engine) ->
     Engine#seresye{ alfa = Alfa, join = Join }.
 
 serialize(#seresye{ alfa = Alfa0, join = Join0 } = Engine) ->
-    Alfa = [ {Cond, serialize_tab(Tab), Alfa_fun} 
+    Alfa = [ {Cond, serialize_tab(Tab), Alfa_fun}
              || {Cond, Tab, Alfa_fun} <- Alfa0 ],
     Join = [ {case Key of
                   {Tab,V} when is_integer(Tab) ->
@@ -80,7 +80,7 @@ serialize(#seresye{ alfa = Alfa0, join = Join0 } = Engine) ->
               end, Beta, Children, Parent, Pos} ||
                {Key, Beta, Children, Parent, Pos} <- Join0 ],
     Engine#seresye{ alfa = Alfa, join = Join }.
-                 
+
 % where
 serialize_tab(Tab) ->
     case ets:info(Tab) of
@@ -97,7 +97,7 @@ restore_tab(Cache, {ets_table, Tab, Info, Content}) ->
             NewTab = ets:new(proplists:get_value(name, Info),
                              [ proplists:get_value(Opt, Info) ||
                                  Opt <- [type,protection] ] ++
-                             [ {Opt, proplists:get_value(Opt, Info)} || 
+                             [ {Opt, proplists:get_value(Opt, Info)} ||
                                  Opt <- [keypos] ]),
             ets:insert(NewTab, Content),
             ets:insert(Cache, {Tab, NewTab}),
@@ -115,9 +115,9 @@ assert(EngineState0, Facts) when is_list(Facts) ->
                         assert(EngineState1, Fact)
                 end, EngineState0, Facts);
 assert(EngineState = #seresye{kb=Kb, alfa=Alfa}, Fact) when is_tuple(Fact) ->
-    execute_pending(case lists:member(Fact, Kb) of
+    execute_pending(case sets:is_element(Fact, Kb) of
                         false ->
-                            Kb1 = [Fact | Kb],
+                            Kb1 = sets:add_element(Fact, Kb),
                             check_cond(EngineState#seresye{kb=Kb1}, Alfa,
                                        {Fact, plus});
                         true -> EngineState
@@ -130,9 +130,9 @@ retract(EngineState0, Facts) when is_list(Facts) ->
                         retract(EngineState1, Fact)
                 end, EngineState0, Facts);
 retract(EngineState = #seresye{kb=Kb, alfa=Alfa}, Fact) when is_tuple(Fact) ->
-    execute_pending(case lists:member(Fact, Kb) of
+    execute_pending(case sets:is_element(Fact, Kb) of
                         true ->
-                            Kb1 = Kb -- [Fact],
+                            Kb1 = sets:del_element(Fact, Kb),
                             check_cond(EngineState#seresye{kb=Kb1}, Alfa,
                                        {Fact, minus});
                         false -> EngineState
@@ -197,7 +197,7 @@ get_rules_fired(EngineState) ->
     seresye_agenda:get_rules_fired(EngineState).
 
 get_kb(#seresye{kb=Kb}) ->
-    Kb.
+    sets:to_list(Kb).
 
 query_kb(EngineState, Pattern) when is_tuple(Pattern) ->
     PList = tuple_to_list(Pattern),
@@ -441,7 +441,7 @@ extract_parameters([{record, _, RecordName, Condition}
                                                 RecordDefinition)]},
     extract_parameters(Tail, RecordList, [Pattern | Acc]);
 extract_parameters([{tuple, L, Elements}| Tail], RecordList, Acc) ->
-    Pattern = {tuple, L, 
+    Pattern = {tuple, L,
                extract_parameters(Elements, RecordList, [])},
     extract_parameters(Tail, RecordList, [Pattern | Acc]);
 extract_parameters([Condition | Tail], RecordList, Acc) ->
@@ -588,7 +588,7 @@ add_alfa(#seresye{kb=Kb, alfa=Alfa}, Cond) ->
                        [Cond],[],[{atom,1,true}]}]}}],
             Alfa_fun = eval(Fun),
             Alfa1 = [{Cond, Tab, Alfa_fun} | Alfa],
-            initialize_alfa(Cond, Tab, Kb),
+            initialize_alfa(Cond, Tab, sets:to_list(Kb)),
             {Alfa1, {new, Tab}};
         {true, Tab} -> {Alfa, {old, Tab}}
     end.
