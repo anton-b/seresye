@@ -7,5 +7,5 @@
   {vsn, "0.0.4"},
   {modules, []},
   {registered, []},
-  {applications, [kernel, stdlib, erlware_commons]},
+  {applications, [kernel, stdlib, erlware_commons, parse_trans, edown]},
   {mod, {seresye_app, []}}]}.
